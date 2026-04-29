@@ -359,7 +359,7 @@ export function evaluateOwf(i: Inputs): OwfDetail {
 // Aggregate
 // -----------------------------------------------------------------------------
 export type ProgramSummary = {
-  id: "snap" | "medicaid_adults" | "medicaid_child" | "heap" | "owf";
+  id: "snap" | "medicaid_adults" | "medicaid_child" | "heap" | "pipp" | "owf";
   name: string;
   fullName: string;
   eligible: boolean;
