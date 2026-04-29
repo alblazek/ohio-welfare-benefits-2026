@@ -1,12 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import {
-  evaluateAll,
-  fpl,
-  currency,
-  FPL_YEAR_LABEL,
-  type Inputs,
-} from "@/lib/benefits";
+import { evaluateAll, fpl, currency, FPL_YEAR_LABEL, type Inputs } from "@/lib/benefits";
 
 export const Route = createFileRoute("/")({
   component: Index,
