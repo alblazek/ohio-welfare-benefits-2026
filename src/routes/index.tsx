@@ -321,6 +321,23 @@ function Index() {
                     </div>
                   )}
 
+                  {r.eligible && r.estimatedBenefitAnnual !== undefined && r.estimatedBenefitAnnual > 0 && (
+                    <div className="mt-5 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 flex items-baseline justify-between gap-3">
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                          {r.estimatedBenefitLabel ?? "Estimated benefit"}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          Approximate — final amount set by program administrator.
+                        </div>
+                      </div>
+                      <div className="font-display text-2xl font-semibold text-primary whitespace-nowrap">
+                        {currency(r.estimatedBenefitAnnual)}
+                        <span className="text-sm text-muted-foreground font-sans font-normal"> /yr</span>
+                      </div>
+                    </div>
+                  )}
+
                   <ul className="mt-4 space-y-1.5 text-xs text-muted-foreground leading-relaxed list-disc pl-5">
                     {r.notes.map((n, idx) => (
                       <li key={idx}>{n}</li>
