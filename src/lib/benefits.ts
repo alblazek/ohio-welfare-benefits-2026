@@ -489,16 +489,15 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
       estimatedBenefitLabel: "Estimated annual PIPP credit",
       headline: !pipp.eligible
         ? `Income exceeds 150% FPL PIPP threshold`
-        : pipp.heatType === "unknown"
-        ? `Eligible — enter gas/electric bills to estimate savings`
-        : `Eligible — payment capped at ${pipp.heatType === "gas" ? "5%+5%" : "10%"} of monthly income`,
+        : `Eligible — payment capped at ${pipp.heatType === "electric" ? "10%" : "5%+5%"} of monthly income`,
       notes: [
-        pipp.eligible && pipp.heatType === "gas"
-          ? `PIPP capped payment: ${currency(pipp.monthlyGasPayment)}/mo gas + ${currency(pipp.monthlyElectricPayment)}/mo electric vs. your reported ${currency(i.monthlyGasBill + i.monthlyElectricBill)}/mo total.`
-          : pipp.eligible && pipp.heatType === "electric"
-          ? `PIPP capped payment: ${currency(pipp.monthlyElectricPayment)}/mo electric vs. your reported ${currency(i.monthlyElectricBill)}/mo.`
-          : `Enter monthly gas and/or electric bills above to see your capped payment.`,
-        `Annual credit estimate = (current monthly bills − PIPP capped payment) × 12, floored at $0.`,
+        pipp.eligible && pipp.heatType === "electric"
+          ? `PIPP capped payment: ${currency(pipp.monthlyElectricPayment)}/mo electric (vs. baseline ${currency(pipp.baselineMonthlyElectric)}/mo for an all-electric Ohio home).`
+          : pipp.eligible
+          ? `PIPP capped payment: ${currency(pipp.monthlyGasPayment)}/mo gas + ${currency(pipp.monthlyElectricPayment)}/mo electric (vs. baseline ${currency(pipp.baselineMonthlyGas + pipp.baselineMonthlyElectric)}/mo for a gas-heated Ohio home).`
+          : `PIPP would cap gas at 5% and electric at 5% of monthly income (or 10% to electric only if all-electric heat).`,
+        `Credit estimate = (baseline monthly utility cost − PIPP capped payment) × 12. Baseline is the higher of your reported bills or Ohio typical residential cost (gas ~$95, electric ~$135, all-electric heat ~$200).`,
+        `Heat type is inferred from your bills — gas bill present = gas heat; otherwise all-electric. Defaults to gas if no bills entered (most common in Ohio).`,
         `Gas-heated homes pay 5% of income to gas + 5% to electric (10% total).`,
         `All-electric heated homes pay 10% of income to electric only.`,
         `Minimum payment is $10 per utility per month, even at very low income.`,
