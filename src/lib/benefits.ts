@@ -317,10 +317,13 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
         : !snap.passesNet
         ? `Over net limit after deductions (${currency(snap.netLimitMonthly)}/mo)`
         : `Passes both gross & net income tests`,
+      estimatedBenefitAnnual: snap.estimatedMonthlyBenefit * 12,
+      estimatedBenefitLabel: `Estimated SNAP allotment (${currency(snap.estimatedMonthlyBenefit)}/mo)`,
       notes: [
         `Gross income test: ${currency(snap.grossMonthly)}/mo vs limit ${currency(snap.grossLimitMonthly)}/mo (130% FPL).`,
         `Net income test: ${currency(snap.netMonthly)}/mo vs limit ${currency(snap.netLimitMonthly)}/mo (100% FPL).`,
         `Deductions applied: 20% earned (${currency(snap.earnedDeduction)}), standard (${currency(snap.standardDeduction)}), dependent care (${currency(snap.dependentCareDeduction)}), excess shelter (${currency(snap.excessShelterDeduction)}).`,
+        `Benefit formula: max allotment for ${i.householdSize} (${currency(snap.maxMonthlyBenefit)}/mo) minus 30% of net income, rounded down. Min $23 for 1–2 person households.`,
         `Asset limit: $3,000 ($4,500 if elderly/disabled member). Not modeled here.`,
       ],
     },
