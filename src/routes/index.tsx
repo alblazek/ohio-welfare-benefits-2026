@@ -29,6 +29,8 @@ function Index() {
     hasChildOrPregnant: true,
     monthlyShelter: 1200,
     monthlyDependentCare: 0,
+    monthlyGasBill: 90,
+    monthlyElectricBill: 130,
   });
 
   const update = <K extends keyof Inputs>(k: K, v: Inputs[K]) =>
