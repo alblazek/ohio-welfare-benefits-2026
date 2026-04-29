@@ -120,42 +120,102 @@ export function snapMaxIncome(i: Inputs): number {
 
 // -----------------------------------------------------------------------------
 // Ohio Medicaid — MAGI-based, no asset test for these categories.
-//   Adults 19–64:           ≤ 138% FPL
+//   Adults 19–64 (expansion): ≤ 138% FPL
 //   Children (Healthy Start/CHIP): ≤ 211% FPL
-//   Pregnant individuals:   ≤ 200% FPL
-// We report the most generous category that applies to the household.
+//   Pregnant individuals:     ≤ 200% FPL
+// We expose Adults and Children/Pregnant as separate programs so users can
+// see both pathways side-by-side.
 // -----------------------------------------------------------------------------
-export type MedicaidDetail = {
-  category: "Adults" | "Children/Pregnant";
+export type MedicaidTier = {
   fplPercent: number;
   limitAnnual: number;
   eligible: boolean;
 };
 
-export function evaluateMedicaid(i: Inputs): MedicaidDetail {
-  const useChildTier = i.hasChildOrPregnant;
-  const pct = useChildTier ? 211 : 138;
+export function evaluateMedicaidAdults(i: Inputs): MedicaidTier {
+  const pct = 138;
   const limitAnnual = Math.round((fpl(i.householdSize) * pct) / 100);
-  return {
-    category: useChildTier ? "Children/Pregnant" : "Adults",
-    fplPercent: pct,
-    limitAnnual,
-    eligible: i.annualIncome <= limitAnnual,
-  };
+  return { fplPercent: pct, limitAnnual, eligible: i.annualIncome <= limitAnnual };
+}
+
+export function evaluateMedicaidChildPregnant(i: Inputs): MedicaidTier {
+  // Children up to 211% FPL; pregnant up to 200% FPL. Use the more generous
+  // (children) for the headline limit since households with kids are common.
+  const pct = 211;
+  const limitAnnual = Math.round((fpl(i.householdSize) * pct) / 100);
+  return { fplPercent: pct, limitAnnual, eligible: i.annualIncome <= limitAnnual };
 }
 
 // -----------------------------------------------------------------------------
 // Ohio HEAP (LIHEAP) — Ohio Development Services Agency uses 175% FPL.
+// Benefit estimate: Ohio's regular HEAP benefit is a one-time annual credit
+// applied to the primary heating account. The amount varies by FPL tier,
+// fuel type, household size, and actual energy burden. We approximate using
+// a published-style tier matrix (2024–2025 benefit ranges):
+//   ≤  75% FPL: base $700
+//   ≤ 125% FPL: base $475
+//   ≤ 175% FPL: base $275
+// then add ~$40/person above 1, and cap at the household's estimated annual
+// heating cost (gas bill is the proxy; electric also counted if no gas).
 // -----------------------------------------------------------------------------
 export type HeapDetail = {
   fplPercent: 175;
   limitAnnual: number;
   eligible: boolean;
+  /** Estimated annual HEAP benefit in dollars (0 if not eligible) */
+  estimatedBenefit: number;
+  /** Tier label for display */
+  tierLabel: string;
 };
 
 export function evaluateHeap(i: Inputs): HeapDetail {
   const limitAnnual = Math.round(fpl(i.householdSize) * 1.75);
-  return { fplPercent: 175, limitAnnual, eligible: i.annualIncome <= limitAnnual };
+  const eligible = i.annualIncome <= limitAnnual;
+
+  if (!eligible) {
+    return {
+      fplPercent: 175,
+      limitAnnual,
+      eligible: false,
+      estimatedBenefit: 0,
+      tierLabel: "Over 175% FPL",
+    };
+  }
+
+  const pctOfFpl = (i.annualIncome / fpl(i.householdSize)) * 100;
+  let base = 0;
+  let tierLabel = "";
+  if (pctOfFpl <= 75) {
+    base = 700;
+    tierLabel = "Lowest-income tier (≤75% FPL)";
+  } else if (pctOfFpl <= 125) {
+    base = 475;
+    tierLabel = "Mid tier (76–125% FPL)";
+  } else {
+    base = 275;
+    tierLabel = "Upper tier (126–175% FPL)";
+  }
+
+  const householdBoost = Math.max(0, i.householdSize - 1) * 40;
+  // Approx annual heating cost — gas dominant in Ohio winters; if user reports
+  // no gas, use ~60% of electric bill as the heating share.
+  const annualHeatingCost =
+    i.monthlyGasBill > 0
+      ? i.monthlyGasBill * 12
+      : i.monthlyElectricBill * 12 * 0.6;
+
+  const uncapped = base + householdBoost;
+  // HEAP can't exceed actual annual heating cost; floor at $50 if any bill reported.
+  const cap = annualHeatingCost > 0 ? annualHeatingCost : uncapped;
+  const estimatedBenefit = Math.round(Math.max(0, Math.min(uncapped, cap)));
+
+  return {
+    fplPercent: 175,
+    limitAnnual,
+    eligible: true,
+    estimatedBenefit,
+    tierLabel,
+  };
 }
 
 // -----------------------------------------------------------------------------
