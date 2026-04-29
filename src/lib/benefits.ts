@@ -65,7 +65,25 @@ export type SnapDetail = {
   excessShelterDeduction: number;
   passesGross: boolean;
   passesNet: boolean;
+  /** Estimated monthly SNAP allotment in dollars (0 if not eligible) */
+  estimatedMonthlyBenefit: number;
+  /** Maximum monthly SNAP allotment for this household size */
+  maxMonthlyBenefit: number;
 };
+
+// USDA SNAP maximum monthly allotments — FY2025 (48 states + DC).
+// Updated each Oct 1; FY2026 values not yet published.
+const SNAP_MAX_ALLOTMENT: Record<number, number> = {
+  1: 292, 2: 536, 3: 768, 4: 975, 5: 1158, 6: 1390, 7: 1536, 8: 1756,
+};
+const SNAP_MAX_ADDITIONAL = 220; // per person beyond 8
+// Minimum benefit for 1–2 person eligible households (FY2025)
+const SNAP_MIN_BENEFIT = 23;
+
+function snapMaxAllotment(size: number): number {
+  if (size <= 8) return SNAP_MAX_ALLOTMENT[size];
+  return SNAP_MAX_ALLOTMENT[8] + (size - 8) * SNAP_MAX_ADDITIONAL;
+}
 
 export function evaluateSnap(i: Inputs): SnapDetail {
   const grossMonthly = i.annualIncome / 12;
