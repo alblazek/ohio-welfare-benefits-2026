@@ -283,6 +283,13 @@ export type PippDetail = {
 };
 
 const PIPP_MIN_PAYMENT = 10;
+// Ohio typical residential utility costs (EIA 2023 averages, rough):
+//   Natural gas heat: ~$95/mo (annualized — winter peaks much higher)
+//   Electric (non-heat): ~$135/mo
+//   All-electric heat: ~$200/mo
+const PIPP_TYPICAL_GAS = 95;
+const PIPP_TYPICAL_ELEC_NONHEAT = 135;
+const PIPP_TYPICAL_ELEC_HEAT = 200;
 
 export function evaluatePipp(i: Inputs): PippDetail {
   const limitAnnual = Math.round(fpl(i.householdSize) * 1.50);
@@ -290,8 +297,18 @@ export function evaluatePipp(i: Inputs): PippDetail {
   const monthlyIncome = i.annualIncome / 12;
 
   // Infer heat type from reported bills: gas reported → gas heat; otherwise electric.
+  // (Default to gas — the most common Ohio heat source — when no bills entered.)
   const heatType: PippDetail["heatType"] =
-    i.monthlyGasBill > 0 ? "gas" : i.monthlyElectricBill > 0 ? "electric" : "unknown";
+    i.monthlyGasBill > 0 ? "gas" : i.monthlyElectricBill > 0 ? "electric" : "gas";
+
+  // Baseline = max(user-reported bill, Ohio typical) so credit estimate stays
+  // stable and meaningful even when the user hasn't entered detailed bills.
+  const baselineMonthlyGas =
+    heatType === "gas" ? Math.max(i.monthlyGasBill, PIPP_TYPICAL_GAS) : 0;
+  const baselineMonthlyElectric =
+    heatType === "electric"
+      ? Math.max(i.monthlyElectricBill, PIPP_TYPICAL_ELEC_HEAT)
+      : Math.max(i.monthlyElectricBill, PIPP_TYPICAL_ELEC_NONHEAT);
 
   if (!eligible) {
     return {
@@ -301,6 +318,8 @@ export function evaluatePipp(i: Inputs): PippDetail {
       monthlyGasPayment: 0,
       monthlyElectricPayment: 0,
       estimatedAnnualSavings: 0,
+      baselineMonthlyGas,
+      baselineMonthlyElectric,
       heatType,
     };
   }
@@ -310,16 +329,14 @@ export function evaluatePipp(i: Inputs): PippDetail {
 
   if (heatType === "gas") {
     monthlyGasPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.05));
-    if (i.monthlyElectricBill > 0) {
-      monthlyElectricPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.05));
-    }
-  } else if (heatType === "electric") {
+    monthlyElectricPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.05));
+  } else {
     monthlyElectricPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.10));
   }
 
-  // Savings = current bill - capped payment, never negative (PIPP doesn't raise bills).
-  const gasSavings = Math.max(0, i.monthlyGasBill - monthlyGasPayment);
-  const electricSavings = Math.max(0, i.monthlyElectricBill - monthlyElectricPayment);
+  // Credit = baseline bill - capped payment, never negative.
+  const gasSavings = Math.max(0, baselineMonthlyGas - monthlyGasPayment);
+  const electricSavings = Math.max(0, baselineMonthlyElectric - monthlyElectricPayment);
   const estimatedAnnualSavings = Math.round((gasSavings + electricSavings) * 12);
 
   return {
@@ -329,6 +346,8 @@ export function evaluatePipp(i: Inputs): PippDetail {
     monthlyGasPayment,
     monthlyElectricPayment,
     estimatedAnnualSavings,
+    baselineMonthlyGas,
+    baselineMonthlyElectric,
     heatType,
   };
 }
