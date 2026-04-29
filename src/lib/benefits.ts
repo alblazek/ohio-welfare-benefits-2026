@@ -106,6 +106,22 @@ export function evaluateSnap(i: Inputs): SnapDetail {
 
   const netMonthly = Math.max(0, adjusted - excessShelterDeduction);
 
+  const passesGross = grossMonthly <= grossLimitMonthly;
+  const passesNet = netMonthly <= netLimitMonthly;
+  const maxMonthlyBenefit = snapMaxAllotment(i.householdSize);
+
+  // Benefit formula: max allotment - 30% of net income, rounded down.
+  // Min benefit ($23) applies to eligible 1–2 person households.
+  let estimatedMonthlyBenefit = 0;
+  if (passesGross && passesNet) {
+    const raw = Math.floor(maxMonthlyBenefit - 0.3 * netMonthly);
+    if (raw <= 0) {
+      estimatedMonthlyBenefit = i.householdSize <= 2 ? SNAP_MIN_BENEFIT : 0;
+    } else {
+      estimatedMonthlyBenefit = raw;
+    }
+  }
+
   return {
     grossMonthly,
     grossLimitMonthly,
@@ -115,8 +131,10 @@ export function evaluateSnap(i: Inputs): SnapDetail {
     standardDeduction,
     dependentCareDeduction,
     excessShelterDeduction,
-    passesGross: grossMonthly <= grossLimitMonthly,
-    passesNet: netMonthly <= netLimitMonthly,
+    passesGross,
+    passesNet,
+    estimatedMonthlyBenefit,
+    maxMonthlyBenefit,
   };
 }
 
