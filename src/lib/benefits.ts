@@ -486,6 +486,7 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
       ],
     },
     {
+      id: "owf",
       name: "OWF (TANF)",
       fullName: "Ohio Works First — Cash Assistance",
       eligible: owf.eligible,
