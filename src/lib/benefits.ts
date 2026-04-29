@@ -65,7 +65,25 @@ export type SnapDetail = {
   excessShelterDeduction: number;
   passesGross: boolean;
   passesNet: boolean;
+  /** Estimated monthly SNAP allotment in dollars (0 if not eligible) */
+  estimatedMonthlyBenefit: number;
+  /** Maximum monthly SNAP allotment for this household size */
+  maxMonthlyBenefit: number;
 };
+
+// USDA SNAP maximum monthly allotments — FY2025 (48 states + DC).
+// Updated each Oct 1; FY2026 values not yet published.
+const SNAP_MAX_ALLOTMENT: Record<number, number> = {
+  1: 292, 2: 536, 3: 768, 4: 975, 5: 1158, 6: 1390, 7: 1536, 8: 1756,
+};
+const SNAP_MAX_ADDITIONAL = 220; // per person beyond 8
+// Minimum benefit for 1–2 person eligible households (FY2025)
+const SNAP_MIN_BENEFIT = 23;
+
+function snapMaxAllotment(size: number): number {
+  if (size <= 8) return SNAP_MAX_ALLOTMENT[size];
+  return SNAP_MAX_ALLOTMENT[8] + (size - 8) * SNAP_MAX_ADDITIONAL;
+}
 
 export function evaluateSnap(i: Inputs): SnapDetail {
   const grossMonthly = i.annualIncome / 12;
@@ -88,6 +106,22 @@ export function evaluateSnap(i: Inputs): SnapDetail {
 
   const netMonthly = Math.max(0, adjusted - excessShelterDeduction);
 
+  const passesGross = grossMonthly <= grossLimitMonthly;
+  const passesNet = netMonthly <= netLimitMonthly;
+  const maxMonthlyBenefit = snapMaxAllotment(i.householdSize);
+
+  // Benefit formula: max allotment - 30% of net income, rounded down.
+  // Min benefit ($23) applies to eligible 1–2 person households.
+  let estimatedMonthlyBenefit = 0;
+  if (passesGross && passesNet) {
+    const raw = Math.floor(maxMonthlyBenefit - 0.3 * netMonthly);
+    if (raw <= 0) {
+      estimatedMonthlyBenefit = i.householdSize <= 2 ? SNAP_MIN_BENEFIT : 0;
+    } else {
+      estimatedMonthlyBenefit = raw;
+    }
+  }
+
   return {
     grossMonthly,
     grossLimitMonthly,
@@ -97,8 +131,10 @@ export function evaluateSnap(i: Inputs): SnapDetail {
     standardDeduction,
     dependentCareDeduction,
     excessShelterDeduction,
-    passesGross: grossMonthly <= grossLimitMonthly,
-    passesNet: netMonthly <= netLimitMonthly,
+    passesGross,
+    passesNet,
+    estimatedMonthlyBenefit,
+    maxMonthlyBenefit,
   };
 }
 
@@ -281,10 +317,13 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
         : !snap.passesNet
         ? `Over net limit after deductions (${currency(snap.netLimitMonthly)}/mo)`
         : `Passes both gross & net income tests`,
+      estimatedBenefitAnnual: snap.estimatedMonthlyBenefit * 12,
+      estimatedBenefitLabel: `Estimated SNAP allotment (${currency(snap.estimatedMonthlyBenefit)}/mo)`,
       notes: [
         `Gross income test: ${currency(snap.grossMonthly)}/mo vs limit ${currency(snap.grossLimitMonthly)}/mo (130% FPL).`,
         `Net income test: ${currency(snap.netMonthly)}/mo vs limit ${currency(snap.netLimitMonthly)}/mo (100% FPL).`,
         `Deductions applied: 20% earned (${currency(snap.earnedDeduction)}), standard (${currency(snap.standardDeduction)}), dependent care (${currency(snap.dependentCareDeduction)}), excess shelter (${currency(snap.excessShelterDeduction)}).`,
+        `Benefit formula: max allotment for ${i.householdSize} (${currency(snap.maxMonthlyBenefit)}/mo) minus 30% of net income, rounded down. Min $23 for 1–2 person households.`,
         `Asset limit: $3,000 ($4,500 if elderly/disabled member). Not modeled here.`,
       ],
     },
