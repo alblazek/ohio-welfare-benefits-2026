@@ -255,6 +255,82 @@ export function evaluateHeap(i: Inputs): HeapDetail {
 }
 
 // -----------------------------------------------------------------------------
+// Ohio PIPP Plus — Percentage of Income Payment Plan Plus
+// Caps the household's regulated utility payment at a percentage of monthly
+// gross income, with arrears credits for on-time payment.
+// Eligibility: ≤ 150% FPL (Ohio PUCO rule, more restrictive than HEAP).
+// Payment formula:
+//   - Electric-heat household: 10% of monthly gross income to electric
+//   - Gas-heat household: 5% to gas + 5% to electric (10% total)
+//   Minimum payment $10 per utility per month.
+// Estimated benefit = (current bill exposure) − (PIPP capped payment),
+//   floored at 0, summed across utilities, annualized.
+// -----------------------------------------------------------------------------
+export type PippDetail = {
+  fplPercent: 150;
+  limitAnnual: number;
+  eligible: boolean;
+  /** Monthly PIPP-capped payment for gas (0 if all-electric heat or ineligible) */
+  monthlyGasPayment: number;
+  /** Monthly PIPP-capped payment for electric */
+  monthlyElectricPayment: number;
+  /** Estimated annual savings vs. current bills */
+  estimatedAnnualSavings: number;
+  heatType: "gas" | "electric" | "unknown";
+};
+
+const PIPP_MIN_PAYMENT = 10;
+
+export function evaluatePipp(i: Inputs): PippDetail {
+  const limitAnnual = Math.round(fpl(i.householdSize) * 1.50);
+  const eligible = i.annualIncome <= limitAnnual;
+  const monthlyIncome = i.annualIncome / 12;
+
+  // Infer heat type from reported bills: gas reported → gas heat; otherwise electric.
+  const heatType: PippDetail["heatType"] =
+    i.monthlyGasBill > 0 ? "gas" : i.monthlyElectricBill > 0 ? "electric" : "unknown";
+
+  if (!eligible) {
+    return {
+      fplPercent: 150,
+      limitAnnual,
+      eligible: false,
+      monthlyGasPayment: 0,
+      monthlyElectricPayment: 0,
+      estimatedAnnualSavings: 0,
+      heatType,
+    };
+  }
+
+  let monthlyGasPayment = 0;
+  let monthlyElectricPayment = 0;
+
+  if (heatType === "gas") {
+    monthlyGasPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.05));
+    if (i.monthlyElectricBill > 0) {
+      monthlyElectricPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.05));
+    }
+  } else if (heatType === "electric") {
+    monthlyElectricPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.10));
+  }
+
+  // Savings = current bill - capped payment, never negative (PIPP doesn't raise bills).
+  const gasSavings = Math.max(0, i.monthlyGasBill - monthlyGasPayment);
+  const electricSavings = Math.max(0, i.monthlyElectricBill - monthlyElectricPayment);
+  const estimatedAnnualSavings = Math.round((gasSavings + electricSavings) * 12);
+
+  return {
+    fplPercent: 150,
+    limitAnnual,
+    eligible: true,
+    monthlyGasPayment,
+    monthlyElectricPayment,
+    estimatedAnnualSavings,
+    heatType,
+  };
+}
+
+// -----------------------------------------------------------------------------
 // Ohio Works First (TANF) — Requires a minor child or pregnancy.
 // Income standard ≈ 50% FPL. Lifetime limit 36 months in Ohio.
 // -----------------------------------------------------------------------------
