@@ -31,6 +31,10 @@ export type Inputs = {
   monthlyShelter: number;
   /** Monthly out-of-pocket dependent care (childcare for work/school) */
   monthlyDependentCare: number;
+  /** Average monthly gas/heating bill (used for HEAP benefit estimate) */
+  monthlyGasBill: number;
+  /** Average monthly electric bill (used for HEAP benefit estimate) */
+  monthlyElectricBill: number;
 };
 
 // -----------------------------------------------------------------------------
@@ -116,42 +120,102 @@ export function snapMaxIncome(i: Inputs): number {
 
 // -----------------------------------------------------------------------------
 // Ohio Medicaid — MAGI-based, no asset test for these categories.
-//   Adults 19–64:           ≤ 138% FPL
+//   Adults 19–64 (expansion): ≤ 138% FPL
 //   Children (Healthy Start/CHIP): ≤ 211% FPL
-//   Pregnant individuals:   ≤ 200% FPL
-// We report the most generous category that applies to the household.
+//   Pregnant individuals:     ≤ 200% FPL
+// We expose Adults and Children/Pregnant as separate programs so users can
+// see both pathways side-by-side.
 // -----------------------------------------------------------------------------
-export type MedicaidDetail = {
-  category: "Adults" | "Children/Pregnant";
+export type MedicaidTier = {
   fplPercent: number;
   limitAnnual: number;
   eligible: boolean;
 };
 
-export function evaluateMedicaid(i: Inputs): MedicaidDetail {
-  const useChildTier = i.hasChildOrPregnant;
-  const pct = useChildTier ? 211 : 138;
+export function evaluateMedicaidAdults(i: Inputs): MedicaidTier {
+  const pct = 138;
   const limitAnnual = Math.round((fpl(i.householdSize) * pct) / 100);
-  return {
-    category: useChildTier ? "Children/Pregnant" : "Adults",
-    fplPercent: pct,
-    limitAnnual,
-    eligible: i.annualIncome <= limitAnnual,
-  };
+  return { fplPercent: pct, limitAnnual, eligible: i.annualIncome <= limitAnnual };
+}
+
+export function evaluateMedicaidChildPregnant(i: Inputs): MedicaidTier {
+  // Children up to 211% FPL; pregnant up to 200% FPL. Use the more generous
+  // (children) for the headline limit since households with kids are common.
+  const pct = 211;
+  const limitAnnual = Math.round((fpl(i.householdSize) * pct) / 100);
+  return { fplPercent: pct, limitAnnual, eligible: i.annualIncome <= limitAnnual };
 }
 
 // -----------------------------------------------------------------------------
 // Ohio HEAP (LIHEAP) — Ohio Development Services Agency uses 175% FPL.
+// Benefit estimate: Ohio's regular HEAP benefit is a one-time annual credit
+// applied to the primary heating account. The amount varies by FPL tier,
+// fuel type, household size, and actual energy burden. We approximate using
+// a published-style tier matrix (2024–2025 benefit ranges):
+//   ≤  75% FPL: base $700
+//   ≤ 125% FPL: base $475
+//   ≤ 175% FPL: base $275
+// then add ~$40/person above 1, and cap at the household's estimated annual
+// heating cost (gas bill is the proxy; electric also counted if no gas).
 // -----------------------------------------------------------------------------
 export type HeapDetail = {
   fplPercent: 175;
   limitAnnual: number;
   eligible: boolean;
+  /** Estimated annual HEAP benefit in dollars (0 if not eligible) */
+  estimatedBenefit: number;
+  /** Tier label for display */
+  tierLabel: string;
 };
 
 export function evaluateHeap(i: Inputs): HeapDetail {
   const limitAnnual = Math.round(fpl(i.householdSize) * 1.75);
-  return { fplPercent: 175, limitAnnual, eligible: i.annualIncome <= limitAnnual };
+  const eligible = i.annualIncome <= limitAnnual;
+
+  if (!eligible) {
+    return {
+      fplPercent: 175,
+      limitAnnual,
+      eligible: false,
+      estimatedBenefit: 0,
+      tierLabel: "Over 175% FPL",
+    };
+  }
+
+  const pctOfFpl = (i.annualIncome / fpl(i.householdSize)) * 100;
+  let base = 0;
+  let tierLabel = "";
+  if (pctOfFpl <= 75) {
+    base = 700;
+    tierLabel = "Lowest-income tier (≤75% FPL)";
+  } else if (pctOfFpl <= 125) {
+    base = 475;
+    tierLabel = "Mid tier (76–125% FPL)";
+  } else {
+    base = 275;
+    tierLabel = "Upper tier (126–175% FPL)";
+  }
+
+  const householdBoost = Math.max(0, i.householdSize - 1) * 40;
+  // Approx annual heating cost — gas dominant in Ohio winters; if user reports
+  // no gas, use ~60% of electric bill as the heating share.
+  const annualHeatingCost =
+    i.monthlyGasBill > 0
+      ? i.monthlyGasBill * 12
+      : i.monthlyElectricBill * 12 * 0.6;
+
+  const uncapped = base + householdBoost;
+  // HEAP can't exceed actual annual heating cost; floor at $50 if any bill reported.
+  const cap = annualHeatingCost > 0 ? annualHeatingCost : uncapped;
+  const estimatedBenefit = Math.round(Math.max(0, Math.min(uncapped, cap)));
+
+  return {
+    fplPercent: 175,
+    limitAnnual,
+    eligible: true,
+    estimatedBenefit,
+    tierLabel,
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -183,7 +247,7 @@ export function evaluateOwf(i: Inputs): OwfDetail {
 // Aggregate
 // -----------------------------------------------------------------------------
 export type ProgramSummary = {
-  id: "snap" | "medicaid" | "heap" | "owf";
+  id: "snap" | "medicaid_adults" | "medicaid_child" | "heap" | "owf";
   name: string;
   fullName: string;
   eligible: boolean;
@@ -191,12 +255,17 @@ export type ProgramSummary = {
   maxAnnualIncome: number;
   /** Plain-language headline for the result card */
   headline: string;
+  /** Optional estimated annual benefit amount in dollars (display-only) */
+  estimatedBenefitAnnual?: number;
+  /** Plain-language label for the estimated benefit (e.g. "Annual HEAP credit") */
+  estimatedBenefitLabel?: string;
   notes: string[];
 };
 
 export function evaluateAll(i: Inputs): ProgramSummary[] {
   const snap = evaluateSnap(i);
-  const medicaid = evaluateMedicaid(i);
+  const medicaidAdults = evaluateMedicaidAdults(i);
+  const medicaidChild = evaluateMedicaidChildPregnant(i);
   const heap = evaluateHeap(i);
   const owf = evaluateOwf(i);
 
@@ -220,19 +289,37 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
       ],
     },
     {
-      id: "medicaid",
-      name: "Medicaid",
-      fullName: `Ohio Medicaid — ${medicaid.category} tier`,
-      eligible: medicaid.eligible,
-      maxAnnualIncome: medicaid.limitAnnual,
-      headline: medicaid.eligible
-        ? `Qualifies under ${medicaid.category} (${medicaid.fplPercent}% FPL)`
-        : `Income exceeds ${medicaid.fplPercent}% FPL threshold`,
+      id: "medicaid_adults",
+      name: "Medicaid — Adults",
+      fullName: "Ohio Medicaid — Adults 19–64 (Expansion / MAGI)",
+      eligible: medicaidAdults.eligible,
+      maxAnnualIncome: medicaidAdults.limitAnnual,
+      headline: medicaidAdults.eligible
+        ? `Adults qualify under expansion (≤138% FPL)`
+        : `Income exceeds 138% FPL adult threshold`,
       notes: [
-        `Ohio expanded Medicaid: adults 19–64 qualify up to 138% FPL.`,
-        `Children & pregnant individuals qualify up to 211% / 200% FPL respectively.`,
-        `MAGI-based — no asset test for these categories.`,
-        `Aged, Blind, or Disabled (ABD) Medicaid uses different rules and an asset limit ($2,000 individual). Not modeled here.`,
+        `Ohio expanded Medicaid covers adults 19–64 with income up to 138% FPL.`,
+        `MAGI-based — no asset test for this category.`,
+        `Adults over 138% FPL may qualify for subsidized Marketplace coverage instead.`,
+        `Aged, Blind, or Disabled (ABD) Medicaid uses different rules and a $2,000 asset limit. Not modeled here.`,
+      ],
+    },
+    {
+      id: "medicaid_child",
+      name: "Medicaid — Children & Pregnant",
+      fullName: "Ohio Medicaid / Healthy Start — Children & Pregnant Individuals",
+      eligible: i.hasChildOrPregnant ? medicaidChild.eligible : false,
+      maxAnnualIncome: medicaidChild.limitAnnual,
+      headline: !i.hasChildOrPregnant
+        ? `No minor child or pregnant member indicated — category does not apply`
+        : medicaidChild.eligible
+        ? `Children qualify under Healthy Start (≤211% FPL)`
+        : `Income exceeds 211% FPL children's threshold`,
+      notes: [
+        `Children qualify under Healthy Start/CHIP up to 211% FPL.`,
+        `Pregnant individuals qualify up to 200% FPL.`,
+        `Children remain eligible even when adults in the same household are over the 138% adult limit.`,
+        `MAGI-based — no asset test.`,
       ],
     },
     {
@@ -241,12 +328,16 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
       fullName: "Ohio Home Energy Assistance Program (LIHEAP)",
       eligible: heap.eligible,
       maxAnnualIncome: heap.limitAnnual,
+      estimatedBenefitAnnual: heap.estimatedBenefit,
+      estimatedBenefitLabel: "Estimated annual HEAP credit",
       headline: heap.eligible
-        ? `Within Ohio's 175% FPL limit`
+        ? `Within Ohio's 175% FPL limit — ${heap.tierLabel}`
         : `Income exceeds 175% FPL`,
       notes: [
         `Ohio HEAP threshold is 175% FPL (more generous than the federal 150% floor).`,
-        `Same threshold applies to the Winter Crisis Program (Nov–Mar) and Summer Crisis Program (Jul–Sep).`,
+        `Benefit estimate uses tiered base (≤75% FPL: $700, ≤125%: $475, ≤175%: $275) plus ~$40/extra household member, capped at your reported annual heating cost.`,
+        `Actual benefit varies by fuel type, energy burden, and program funding. Ohio Development determines final award.`,
+        `Same 175% threshold applies to Winter Crisis (Nov–Mar) and Summer Crisis (Jul–Sep) programs.`,
         `Applicant must be responsible for paying home energy costs.`,
       ],
     },
