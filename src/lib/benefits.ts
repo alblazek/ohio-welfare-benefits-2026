@@ -274,8 +274,11 @@ export type PippDetail = {
   monthlyGasPayment: number;
   /** Monthly PIPP-capped payment for electric */
   monthlyElectricPayment: number;
-  /** Estimated annual savings vs. current bills */
+  /** Estimated annual credit vs. typical Ohio utility cost (or user bill, whichever is higher) */
   estimatedAnnualSavings: number;
+  /** Baseline monthly bills used in the credit estimate (after applying typical-cost floor) */
+  baselineMonthlyGas: number;
+  baselineMonthlyElectric: number;
   heatType: "gas" | "electric" | "unknown";
 };
 
