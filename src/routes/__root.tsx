@@ -29,14 +29,18 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "2026 Ohio welfare eligibility" },
+      { name: "description", content: "Ohio welfare eligibility - as of April 2026" },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "2026 Ohio welfare eligibility" },
+      { property: "og:description", content: "Ohio welfare eligibility - as of April 2026" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "2026 Ohio welfare eligibility" },
+      { name: "twitter:description", content: "Ohio welfare eligibility - as of April 2026" },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8bec4e6e-a235-4510-b877-e8d9762a7020/id-preview-bce6b853--74fcb932-4be2-42d0-938d-a52d95fdd266.lovable.app-1777430542486.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8bec4e6e-a235-4510-b877-e8d9762a7020/id-preview-bce6b853--74fcb932-4be2-42d0-938d-a52d95fdd266.lovable.app-1777430542486.png" },
     ],
     links: [
       {
