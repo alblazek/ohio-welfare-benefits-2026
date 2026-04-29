@@ -194,6 +194,44 @@ function Index() {
               </div>
             </label>
 
+            {/* Energy bills */}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-sm font-medium">Monthly gas bill</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  For HEAP estimate.
+                </span>
+                <div className="mt-2 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={5}
+                    value={inputs.monthlyGasBill}
+                    onChange={(e) => update("monthlyGasBill", Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full h-10 pl-7 pr-3 rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium">Monthly electric</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Used if no gas heating.
+                </span>
+                <div className="mt-2 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={5}
+                    value={inputs.monthlyElectricBill}
+                    onChange={(e) => update("monthlyElectricBill", Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full h-10 pl-7 pr-3 rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </label>
+            </div>
+
             <div className="pt-5 border-t border-border space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">100% FPL ({inputs.householdSize} ppl)</span>
