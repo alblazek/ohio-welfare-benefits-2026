@@ -264,10 +264,10 @@ export type ProgramSummary = {
 
 export function evaluateAll(i: Inputs): ProgramSummary[] {
   const snap = evaluateSnap(i);
-  const medicaidAdults = evaluateMedicaidAdults(i);
-  const medicaidChild = evaluateMedicaidChildPregnant(i);
   const heap = evaluateHeap(i);
   const owf = evaluateOwf(i);
+  const medicaidAdults = evaluateMedicaidAdults(i);
+  const medicaidChild = evaluateMedicaidChildPregnant(i);
 
   return [
     {
