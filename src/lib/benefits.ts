@@ -274,12 +274,22 @@ export type PippDetail = {
   monthlyGasPayment: number;
   /** Monthly PIPP-capped payment for electric */
   monthlyElectricPayment: number;
-  /** Estimated annual savings vs. current bills */
+  /** Estimated annual credit vs. typical Ohio utility cost (or user bill, whichever is higher) */
   estimatedAnnualSavings: number;
+  /** Baseline monthly bills used in the credit estimate (after applying typical-cost floor) */
+  baselineMonthlyGas: number;
+  baselineMonthlyElectric: number;
   heatType: "gas" | "electric" | "unknown";
 };
 
 const PIPP_MIN_PAYMENT = 10;
+// Ohio typical residential utility costs (EIA 2023 averages, rough):
+//   Natural gas heat: ~$95/mo (annualized — winter peaks much higher)
+//   Electric (non-heat): ~$135/mo
+//   All-electric heat: ~$200/mo
+const PIPP_TYPICAL_GAS = 95;
+const PIPP_TYPICAL_ELEC_NONHEAT = 135;
+const PIPP_TYPICAL_ELEC_HEAT = 200;
 
 export function evaluatePipp(i: Inputs): PippDetail {
   const limitAnnual = Math.round(fpl(i.householdSize) * 1.50);
@@ -287,8 +297,18 @@ export function evaluatePipp(i: Inputs): PippDetail {
   const monthlyIncome = i.annualIncome / 12;
 
   // Infer heat type from reported bills: gas reported → gas heat; otherwise electric.
+  // (Default to gas — the most common Ohio heat source — when no bills entered.)
   const heatType: PippDetail["heatType"] =
-    i.monthlyGasBill > 0 ? "gas" : i.monthlyElectricBill > 0 ? "electric" : "unknown";
+    i.monthlyGasBill > 0 ? "gas" : i.monthlyElectricBill > 0 ? "electric" : "gas";
+
+  // Baseline = max(user-reported bill, Ohio typical) so credit estimate stays
+  // stable and meaningful even when the user hasn't entered detailed bills.
+  const baselineMonthlyGas =
+    heatType === "gas" ? Math.max(i.monthlyGasBill, PIPP_TYPICAL_GAS) : 0;
+  const baselineMonthlyElectric =
+    heatType === "electric"
+      ? Math.max(i.monthlyElectricBill, PIPP_TYPICAL_ELEC_HEAT)
+      : Math.max(i.monthlyElectricBill, PIPP_TYPICAL_ELEC_NONHEAT);
 
   if (!eligible) {
     return {
@@ -298,6 +318,8 @@ export function evaluatePipp(i: Inputs): PippDetail {
       monthlyGasPayment: 0,
       monthlyElectricPayment: 0,
       estimatedAnnualSavings: 0,
+      baselineMonthlyGas,
+      baselineMonthlyElectric,
       heatType,
     };
   }
@@ -307,16 +329,14 @@ export function evaluatePipp(i: Inputs): PippDetail {
 
   if (heatType === "gas") {
     monthlyGasPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.05));
-    if (i.monthlyElectricBill > 0) {
-      monthlyElectricPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.05));
-    }
-  } else if (heatType === "electric") {
+    monthlyElectricPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.05));
+  } else {
     monthlyElectricPayment = Math.max(PIPP_MIN_PAYMENT, Math.round(monthlyIncome * 0.10));
   }
 
-  // Savings = current bill - capped payment, never negative (PIPP doesn't raise bills).
-  const gasSavings = Math.max(0, i.monthlyGasBill - monthlyGasPayment);
-  const electricSavings = Math.max(0, i.monthlyElectricBill - monthlyElectricPayment);
+  // Credit = baseline bill - capped payment, never negative.
+  const gasSavings = Math.max(0, baselineMonthlyGas - monthlyGasPayment);
+  const electricSavings = Math.max(0, baselineMonthlyElectric - monthlyElectricPayment);
   const estimatedAnnualSavings = Math.round((gasSavings + electricSavings) * 12);
 
   return {
@@ -326,6 +346,8 @@ export function evaluatePipp(i: Inputs): PippDetail {
     monthlyGasPayment,
     monthlyElectricPayment,
     estimatedAnnualSavings,
+    baselineMonthlyGas,
+    baselineMonthlyElectric,
     heatType,
   };
 }
@@ -467,16 +489,15 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
       estimatedBenefitLabel: "Estimated annual PIPP credit",
       headline: !pipp.eligible
         ? `Income exceeds 150% FPL PIPP threshold`
-        : pipp.heatType === "unknown"
-        ? `Eligible — enter gas/electric bills to estimate savings`
-        : `Eligible — payment capped at ${pipp.heatType === "gas" ? "5%+5%" : "10%"} of monthly income`,
+        : `Eligible — payment capped at ${pipp.heatType === "electric" ? "10%" : "5%+5%"} of monthly income`,
       notes: [
-        pipp.eligible && pipp.heatType === "gas"
-          ? `PIPP capped payment: ${currency(pipp.monthlyGasPayment)}/mo gas + ${currency(pipp.monthlyElectricPayment)}/mo electric vs. your reported ${currency(i.monthlyGasBill + i.monthlyElectricBill)}/mo total.`
-          : pipp.eligible && pipp.heatType === "electric"
-          ? `PIPP capped payment: ${currency(pipp.monthlyElectricPayment)}/mo electric vs. your reported ${currency(i.monthlyElectricBill)}/mo.`
-          : `Enter monthly gas and/or electric bills above to see your capped payment.`,
-        `Annual credit estimate = (current monthly bills − PIPP capped payment) × 12, floored at $0.`,
+        pipp.eligible && pipp.heatType === "electric"
+          ? `PIPP capped payment: ${currency(pipp.monthlyElectricPayment)}/mo electric (vs. baseline ${currency(pipp.baselineMonthlyElectric)}/mo for an all-electric Ohio home).`
+          : pipp.eligible
+          ? `PIPP capped payment: ${currency(pipp.monthlyGasPayment)}/mo gas + ${currency(pipp.monthlyElectricPayment)}/mo electric (vs. baseline ${currency(pipp.baselineMonthlyGas + pipp.baselineMonthlyElectric)}/mo for a gas-heated Ohio home).`
+          : `PIPP would cap gas at 5% and electric at 5% of monthly income (or 10% to electric only if all-electric heat).`,
+        `Credit estimate = (baseline monthly utility cost − PIPP capped payment) × 12. Baseline is the higher of your reported bills or Ohio typical residential cost (gas ~$95, electric ~$135, all-electric heat ~$200).`,
+        `Heat type is inferred from your bills — gas bill present = gas heat; otherwise all-electric. Defaults to gas if no bills entered (most common in Ohio).`,
         `Gas-heated homes pay 5% of income to gas + 5% to electric (10% total).`,
         `All-electric heated homes pay 10% of income to electric only.`,
         `Minimum payment is $10 per utility per month, even at very low income.`,
