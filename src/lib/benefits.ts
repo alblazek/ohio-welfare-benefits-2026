@@ -31,6 +31,10 @@ export type Inputs = {
   monthlyShelter: number;
   /** Monthly out-of-pocket dependent care (childcare for work/school) */
   monthlyDependentCare: number;
+  /** Average monthly gas/heating bill (used for HEAP benefit estimate) */
+  monthlyGasBill: number;
+  /** Average monthly electric bill (used for HEAP benefit estimate) */
+  monthlyElectricBill: number;
 };
 
 // -----------------------------------------------------------------------------
