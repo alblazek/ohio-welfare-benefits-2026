@@ -464,20 +464,20 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
       eligible: pipp.eligible,
       maxAnnualIncome: pipp.limitAnnual,
       estimatedBenefitAnnual: pipp.estimatedAnnualSavings,
-      estimatedBenefitLabel:
-        pipp.heatType === "gas"
-          ? `PIPP capped payment: ${currency(pipp.monthlyGasPayment)}/mo gas + ${currency(pipp.monthlyElectricPayment)}/mo electric`
-          : pipp.heatType === "electric"
-          ? `PIPP capped payment: ${currency(pipp.monthlyElectricPayment)}/mo electric`
-          : "Estimated annual utility savings",
+      estimatedBenefitLabel: "Estimated annual PIPP credit",
       headline: !pipp.eligible
         ? `Income exceeds 150% FPL PIPP threshold`
         : pipp.heatType === "unknown"
         ? `Eligible — enter gas/electric bills to estimate savings`
         : `Eligible — payment capped at ${pipp.heatType === "gas" ? "5%+5%" : "10%"} of monthly income`,
       notes: [
-        `PIPP Plus caps your regulated utility bill at a percentage of monthly gross income.`,
-        `Gas-heated homes pay 5% of income to the gas utility + 5% to electric (10% total).`,
+        pipp.eligible && pipp.heatType === "gas"
+          ? `PIPP capped payment: ${currency(pipp.monthlyGasPayment)}/mo gas + ${currency(pipp.monthlyElectricPayment)}/mo electric vs. your reported ${currency(i.monthlyGasBill + i.monthlyElectricBill)}/mo total.`
+          : pipp.eligible && pipp.heatType === "electric"
+          ? `PIPP capped payment: ${currency(pipp.monthlyElectricPayment)}/mo electric vs. your reported ${currency(i.monthlyElectricBill)}/mo.`
+          : `Enter monthly gas and/or electric bills above to see your capped payment.`,
+        `Annual credit estimate = (current monthly bills − PIPP capped payment) × 12, floored at $0.`,
+        `Gas-heated homes pay 5% of income to gas + 5% to electric (10% total).`,
         `All-electric heated homes pay 10% of income to electric only.`,
         `Minimum payment is $10 per utility per month, even at very low income.`,
         `Eligibility threshold is 150% FPL — stricter than HEAP's 175% FPL.`,
