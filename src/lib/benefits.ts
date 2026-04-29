@@ -377,6 +377,7 @@ export type ProgramSummary = {
 export function evaluateAll(i: Inputs): ProgramSummary[] {
   const snap = evaluateSnap(i);
   const heap = evaluateHeap(i);
+  const pipp = evaluatePipp(i);
   const owf = evaluateOwf(i);
   const medicaidAdults = evaluateMedicaidAdults(i);
   const medicaidChild = evaluateMedicaidChildPregnant(i);
