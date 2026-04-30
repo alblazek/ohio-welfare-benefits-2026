@@ -126,18 +126,6 @@ function Index() {
                   className="w-full h-11 pl-7 pr-3 rounded-md border border-border bg-background font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
-              <input
-                type="range"
-                min={0}
-                max={150000}
-                step={500}
-                value={inputs.annualIncome}
-                onChange={(e) => update("annualIncome", Number(e.target.value))}
-                className="mt-3 w-full accent-primary"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>$0</span><span>$150k</span>
-              </div>
             </label>
 
             {/* Categorical */}
