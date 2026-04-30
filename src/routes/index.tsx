@@ -88,28 +88,16 @@ function Index() {
             {/* Family size */}
             <label className="block">
               <span className="text-sm font-medium">Household size</span>
-              <div className="mt-2 flex items-center gap-3">
-                <button
-                  onClick={() => update("householdSize", Math.max(1, inputs.householdSize - 1))}
-                  className="h-10 w-10 rounded-md border border-border hover:bg-secondary transition-colors text-lg"
-                  aria-label="Decrease size"
-                >−</button>
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={inputs.householdSize}
-                  onChange={(e) =>
-                    update("householdSize", Math.max(1, Math.min(20, Number(e.target.value) || 1)))
-                  }
-                  className="flex-1 h-10 text-center font-display text-xl rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-                <button
-                  onClick={() => update("householdSize", Math.min(20, inputs.householdSize + 1))}
-                  className="h-10 w-10 rounded-md border border-border hover:bg-secondary transition-colors text-lg"
-                  aria-label="Increase size"
-                >+</button>
-              </div>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={inputs.householdSize}
+                onChange={(e) =>
+                  update("householdSize", Math.max(1, Math.min(20, Number(e.target.value) || 1)))
+                }
+                className="mt-2 w-full h-11 px-3 rounded-md border border-border bg-background font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
             </label>
 
             {/* Income */}
