@@ -518,6 +518,7 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
   const owf = evaluateOwf(i);
   const medicaidAdults = evaluateMedicaidAdults(i);
   const medicaidChild = evaluateMedicaidChildPregnant(i);
+  const aca = evaluateAca(i);
 
   return [
     {
