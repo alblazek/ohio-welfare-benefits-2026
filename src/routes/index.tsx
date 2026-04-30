@@ -32,9 +32,23 @@ function Index() {
     monthlyGasBill: 90,
     monthlyElectricBill: 130,
   });
+  const [householdSizeInput, setHouseholdSizeInput] = useState("3");
 
   const update = <K extends keyof Inputs>(k: K, v: Inputs[K]) =>
     setInputs((s) => ({ ...s, [k]: v }));
+
+  const commitHouseholdSize = (value: string) => {
+    const digitsOnly = value.replace(/\D/g, "");
+
+    if (digitsOnly === "") {
+      setHouseholdSizeInput("");
+      return;
+    }
+
+    const nextValue = Math.max(1, Math.min(20, Number(digitsOnly)));
+    setHouseholdSizeInput(String(nextValue));
+    update("householdSize", nextValue);
+  };
 
   const results = useMemo(() => evaluateAll(inputs), [inputs]);
   const baseFpl = useMemo(() => fpl(inputs.householdSize), [inputs.householdSize]);
@@ -89,13 +103,17 @@ function Index() {
             <label className="block">
               <span className="text-sm font-medium">Household size</span>
               <input
-                type="number"
-                min={1}
-                max={20}
-                value={inputs.householdSize}
-                onChange={(e) =>
-                  update("householdSize", Math.max(1, Math.min(20, Number(e.target.value) || 1)))
-                }
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={householdSizeInput}
+                onChange={(e) => commitHouseholdSize(e.target.value)}
+                onBlur={() => {
+                  if (householdSizeInput.trim() === "") {
+                    setHouseholdSizeInput("1");
+                    update("householdSize", 1);
+                  }
+                }}
                 className="mt-2 w-full h-11 px-3 rounded-md border border-border bg-background font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </label>
