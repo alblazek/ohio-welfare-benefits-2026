@@ -353,6 +353,121 @@ export function evaluatePipp(i: Inputs): PippDetail {
 }
 
 // -----------------------------------------------------------------------------
+// ACA Marketplace Premium Tax Credit (PTC) — healthcare.gov
+// Eligibility: household income generally 100%–400% FPL. Under the IRA
+// (extended through plan year 2025; assumed continued for 2026 modeling),
+// the 400% FPL cliff is removed and the applicable percentage caps are:
+//   ≤150% FPL: 0% of income
+//   150–200%:  0–2%
+//   200–250%:  2–4%
+//   250–300%:  4–6%
+//   300–400%:  6–8.5%
+//   ≥400%:     8.5%
+// In Ohio, adults <138% FPL are routed to expansion Medicaid (no PTC).
+// Subsidy = max(0, benchmark Silver premium − expected contribution).
+// Benchmark (second-lowest-cost Silver) varies by county/age/family. We use
+// rough Ohio family averages: $700/mo single adult, scaled by household size.
+// -----------------------------------------------------------------------------
+export type AcaDetail = {
+  fplPercentLower: 100;
+  fplPercentUpper: 400;
+  /** Income floor (typically 138% FPL in Ohio because of Medicaid expansion) */
+  lowerLimitAnnual: number;
+  /** Soft upper limit (400% FPL) — above this still eligible under IRA but at 8.5% cap */
+  upperLimitAnnual: number;
+  eligible: boolean;
+  /** Reason ineligible, if applicable */
+  reason: string;
+  /** Applicable percentage of income expected to be contributed to premium */
+  applicablePercent: number;
+  /** Expected annual household contribution toward Silver benchmark */
+  expectedAnnualContribution: number;
+  /** Estimated benchmark Silver plan annual premium for this household */
+  benchmarkAnnualPremium: number;
+  /** Estimated annual Premium Tax Credit (subsidy) */
+  estimatedAnnualSubsidy: number;
+};
+
+// Rough monthly benchmark Silver premium in Ohio (second-lowest-cost Silver,
+// average non-tobacco adult ~age 40). Family pricing approximated by adding
+// ~$500/mo for a second adult and ~$350/mo per child, capped at 3 children.
+const ACA_BENCHMARK_ADULT_MONTHLY = 500;
+const ACA_BENCHMARK_SECOND_ADULT_MONTHLY = 500;
+const ACA_BENCHMARK_CHILD_MONTHLY = 350;
+const ACA_MAX_BILLED_CHILDREN = 3;
+
+function acaApplicablePercent(pctOfFpl: number): number {
+  if (pctOfFpl <= 150) return 0;
+  if (pctOfFpl <= 200) return 0 + ((pctOfFpl - 150) / 50) * (2 - 0);
+  if (pctOfFpl <= 250) return 2 + ((pctOfFpl - 200) / 50) * (4 - 2);
+  if (pctOfFpl <= 300) return 4 + ((pctOfFpl - 250) / 50) * (6 - 4);
+  if (pctOfFpl <= 400) return 6 + ((pctOfFpl - 300) / 100) * (8.5 - 6);
+  return 8.5;
+}
+
+function acaBenchmarkMonthly(householdSize: number): number {
+  // Heuristic: assume 2 adults if household ≥2, remainder are children up to cap.
+  const adults = householdSize >= 2 ? 2 : 1;
+  const children = Math.min(ACA_MAX_BILLED_CHILDREN, Math.max(0, householdSize - adults));
+  return (
+    ACA_BENCHMARK_ADULT_MONTHLY +
+    (adults === 2 ? ACA_BENCHMARK_SECOND_ADULT_MONTHLY : 0) +
+    children * ACA_BENCHMARK_CHILD_MONTHLY
+  );
+}
+
+export function evaluateAca(i: Inputs): AcaDetail {
+  const baseFpl = fpl(i.householdSize);
+  const lowerLimitAnnual = Math.round(baseFpl * 1.38); // Ohio Medicaid cutoff
+  const upperLimitAnnual = Math.round(baseFpl * 4.00);
+  const pctOfFpl = (i.annualIncome / baseFpl) * 100;
+  const benchmarkAnnualPremium = Math.round(acaBenchmarkMonthly(i.householdSize) * 12);
+
+  // Ineligibility paths
+  if (i.annualIncome < Math.round(baseFpl * 1.0)) {
+    return {
+      fplPercentLower: 100, fplPercentUpper: 400,
+      lowerLimitAnnual, upperLimitAnnual,
+      eligible: false,
+      reason: "Income below 100% FPL — likely Medicaid-eligible instead.",
+      applicablePercent: 0,
+      expectedAnnualContribution: 0,
+      benchmarkAnnualPremium,
+      estimatedAnnualSubsidy: 0,
+    };
+  }
+  if (i.annualIncome <= lowerLimitAnnual) {
+    return {
+      fplPercentLower: 100, fplPercentUpper: 400,
+      lowerLimitAnnual, upperLimitAnnual,
+      eligible: false,
+      reason: "Eligible for Ohio Medicaid expansion (≤138% FPL) — Marketplace subsidies not available.",
+      applicablePercent: 0,
+      expectedAnnualContribution: 0,
+      benchmarkAnnualPremium,
+      estimatedAnnualSubsidy: 0,
+    };
+  }
+
+  const applicablePercent = acaApplicablePercent(pctOfFpl);
+  const expectedAnnualContribution = Math.round(i.annualIncome * (applicablePercent / 100));
+  const estimatedAnnualSubsidy = Math.max(0, benchmarkAnnualPremium - expectedAnnualContribution);
+
+  return {
+    fplPercentLower: 100, fplPercentUpper: 400,
+    lowerLimitAnnual, upperLimitAnnual,
+    eligible: estimatedAnnualSubsidy > 0,
+    reason: estimatedAnnualSubsidy > 0
+      ? "Qualifies for Premium Tax Credit"
+      : "Income too high — expected contribution exceeds benchmark Silver premium.",
+    applicablePercent,
+    expectedAnnualContribution,
+    benchmarkAnnualPremium,
+    estimatedAnnualSubsidy,
+  };
+}
+
+// -----------------------------------------------------------------------------
 // Ohio Works First (TANF) — Requires a minor child or pregnancy.
 // Income standard ≈ 50% FPL. Lifetime limit 36 months in Ohio.
 // -----------------------------------------------------------------------------
@@ -381,7 +496,7 @@ export function evaluateOwf(i: Inputs): OwfDetail {
 // Aggregate
 // -----------------------------------------------------------------------------
 export type ProgramSummary = {
-  id: "snap" | "medicaid_adults" | "medicaid_child" | "heap" | "pipp" | "owf";
+  id: "snap" | "medicaid_adults" | "medicaid_child" | "aca" | "heap" | "pipp" | "owf";
   name: string;
   fullName: string;
   eligible: boolean;
@@ -403,6 +518,7 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
   const owf = evaluateOwf(i);
   const medicaidAdults = evaluateMedicaidAdults(i);
   const medicaidChild = evaluateMedicaidChildPregnant(i);
+  const aca = evaluateAca(i);
 
   return [
     {
@@ -458,6 +574,26 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
         `Pregnant individuals qualify up to 200% FPL.`,
         `Children remain eligible even when adults in the same household are over the 138% adult limit.`,
         `MAGI-based — no asset test.`,
+      ],
+    },
+    {
+      id: "aca",
+      name: "ACA Marketplace",
+      fullName: "Healthcare.gov Premium Tax Credit (Silver Benchmark)",
+      eligible: aca.eligible,
+      maxAnnualIncome: aca.upperLimitAnnual,
+      estimatedBenefitAnnual: aca.estimatedAnnualSubsidy,
+      estimatedBenefitLabel: `Estimated annual premium subsidy (Silver benchmark ${currency(Math.round(aca.benchmarkAnnualPremium / 12))}/mo)`,
+      headline: aca.eligible
+        ? `Qualifies for Premium Tax Credit — pay ~${aca.applicablePercent.toFixed(1)}% of income for benchmark Silver`
+        : aca.reason,
+      notes: [
+        `Income range modeled: ${currency(aca.lowerLimitAnnual)}–${currency(aca.upperLimitAnnual)} (138%–400% FPL). In Ohio, adults below 138% FPL are routed to Medicaid expansion.`,
+        `Under the Inflation Reduction Act (in effect through plan year 2025; assumed continued for 2026 modeling), the 400% FPL "subsidy cliff" is removed — households above 400% FPL still cap their premium contribution at 8.5% of income.`,
+        `Benchmark premium estimate: ${currency(aca.benchmarkAnnualPremium)}/yr (~${currency(Math.round(aca.benchmarkAnnualPremium / 12))}/mo) for a household of ${i.householdSize}. Real Ohio premiums vary substantially by county, age, and tobacco use.`,
+        `Expected household contribution: ${currency(aca.expectedAnnualContribution)}/yr (${aca.applicablePercent.toFixed(1)}% of income). Subsidy = benchmark − contribution.`,
+        `Subsidy can be applied to any metal tier (Bronze/Silver/Gold/Platinum), but cost-sharing reductions (lower deductibles/copays) only apply if you pick a Silver plan AND income is ≤250% FPL.`,
+        `Final subsidy is reconciled on your federal tax return (Form 8962). Estimate only — get an exact quote at healthcare.gov.`,
       ],
     },
     {
