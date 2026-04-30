@@ -577,6 +577,26 @@ export function evaluateAll(i: Inputs): ProgramSummary[] {
       ],
     },
     {
+      id: "aca",
+      name: "ACA Marketplace",
+      fullName: "Healthcare.gov Premium Tax Credit (Silver Benchmark)",
+      eligible: aca.eligible,
+      maxAnnualIncome: aca.upperLimitAnnual,
+      estimatedBenefitAnnual: aca.estimatedAnnualSubsidy,
+      estimatedBenefitLabel: `Estimated annual premium subsidy (Silver benchmark ${currency(Math.round(aca.benchmarkAnnualPremium / 12))}/mo)`,
+      headline: aca.eligible
+        ? `Qualifies for Premium Tax Credit — pay ~${aca.applicablePercent.toFixed(1)}% of income for benchmark Silver`
+        : aca.reason,
+      notes: [
+        `Income range modeled: ${currency(aca.lowerLimitAnnual)}–${currency(aca.upperLimitAnnual)} (138%–400% FPL). In Ohio, adults below 138% FPL are routed to Medicaid expansion.`,
+        `Under the Inflation Reduction Act (in effect through plan year 2025; assumed continued for 2026 modeling), the 400% FPL "subsidy cliff" is removed — households above 400% FPL still cap their premium contribution at 8.5% of income.`,
+        `Benchmark premium estimate: ${currency(aca.benchmarkAnnualPremium)}/yr (~${currency(Math.round(aca.benchmarkAnnualPremium / 12))}/mo) for a household of ${i.householdSize}. Real Ohio premiums vary substantially by county, age, and tobacco use.`,
+        `Expected household contribution: ${currency(aca.expectedAnnualContribution)}/yr (${aca.applicablePercent.toFixed(1)}% of income). Subsidy = benchmark − contribution.`,
+        `Subsidy can be applied to any metal tier (Bronze/Silver/Gold/Platinum), but cost-sharing reductions (lower deductibles/copays) only apply if you pick a Silver plan AND income is ≤250% FPL.`,
+        `Final subsidy is reconciled on your federal tax return (Form 8962). Estimate only — get an exact quote at healthcare.gov.`,
+      ],
+    },
+    {
       id: "heap",
       name: "HEAP",
       fullName: "Ohio Home Energy Assistance Program (LIHEAP)",
